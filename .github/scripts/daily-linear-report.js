@@ -15,7 +15,7 @@ const now = new Date();
 const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
 const linearQuery = `
-  query DailyIssues($updatedAfter: DateTime!) {
+  query DailyIssues($updatedAfter: DateTimeOrDuration!) {
     issues(
       filter: { updatedAt: { gte: $updatedAfter } }
       orderBy: updatedAt
