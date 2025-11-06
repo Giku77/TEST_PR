@@ -355,6 +355,12 @@ async function createNotionPage(content) {
           rich_text: [{ type: "text", text: { content: line.slice(3) } }],
         },
       });
+    } else if (line.startsWith("### ")) {          
+      children.push({
+        object: "block",
+        type: "heading_3",
+        heading_3: { rich_text: [{ type: "text", text: { content: line.slice(4) } }] },
+      });
     } else if (line.trim() === "---") {
       children.push({ object: "block", type: "divider", divider: {} });
     } else {
