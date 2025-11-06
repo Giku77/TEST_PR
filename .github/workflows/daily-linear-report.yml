@@ -1,0 +1,26 @@
+name: Daily Linear Report to Notion
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # KST 09:00
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run script
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          NOTION_DATABASE_ID: ${{ secrets.NOTION_DATABASE_ID }}
+          TZ_OFFSET_HOURS: "9"
+        run: node .github/scripts/daily-linear-report.js
