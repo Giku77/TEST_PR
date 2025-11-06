@@ -250,7 +250,7 @@ ${issueLinesForIssueSection}
   return data.choices[0].message.content;
 }
 
-async function createNotionPage(content) { const offset = parseInt(process.env.TZ_OFFSET_HOURS || "9", 10); const now = new Date(); const kstNow = new Date(now.getTime() + offset * 60 * 60 * 1000); const yyyy = kstNow.getUTCFullYear(); const mm = String(kstNow.getUTCMonth() + 1).padStart(2, "0"); const dd = String(kstNow.getUTCDate()).padStart(2, "0"); const title = Linear 일간보고 ${yyyy}-${mm}-${dd}; const lines = content.split("\n"); const children = []; let inCode = false; for (const raw of lines) { const line = raw.replace(/\r$/, ""); // CR 지우기 // 코드블록 토글 if (line.trim().startsWith("
+async function createNotionPage(content) { const offset = parseInt(process.env.TZ_OFFSET_HOURS || "9", 10); const now = new Date(); const kstNow = new Date(now.getTime() + offset * 60 * 60 * 1000); const yyyy = kstNow.getUTCFullYear(); const mm = String(kstNow.getUTCMonth() + 1).padStart(2, "0"); const dd = String(kstNow.getUTCDate()).padStart(2, "0"); const title = `Linear 일간보고 ${yyyy}-${mm}-${dd}`; const lines = content.split("\n"); const children = []; let inCode = false; for (const raw of lines) { const line = raw.replace(/\r$/, ""); // CR 지우기 // 코드블록 토글 if (line.trim().startsWith("
 ")) {
       if (!inCode) {
         // 코드 시작
