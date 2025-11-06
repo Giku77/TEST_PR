@@ -165,6 +165,8 @@ async function makeDailyReportWithAI(issues, dateStr) {
   const remainText =
     remaining.map((i) => `- ${i.title}`).join("\n") || "없음";
 
+  const remainBlock = "```r\n" + remainText + "\n```";
+
  const prompt = `
 너는 게임 개발 팀의 일간보고를 작성하는 보조 AI야.
 아래에 내가 실제로 분류해 놓은 리스트가 있으니까 **그것만** 써.
@@ -228,7 +230,7 @@ ${doneText
 
 # 남은 작업
 \`\`\`r
-${remainText}
+${remainBlock}
 \`\`\`
 
 [ISSUE_SECTION]
