@@ -173,9 +173,6 @@ async function makeDailyReportWithAI(issues, dateStr) {
 
 # ${dateStr} 일간보고: RE:BLOOM
 
-# 이슈
-(여기에 아래 [ISSUE_SECTION]을 그대로 넣어)
-
 ---
 
 # 전일 보고
@@ -404,12 +401,12 @@ async function createNotionPage(content) {
     report = stripKeysOutsideIssue(report);
 
     report = report.replace(
-      /(# 남은 작업[\s\S]*?```r)([\s\S]*?)(```)/,
+      /(# 남은 작업[\s\S]*?```(?:r)?)([\s\S]*?)(```)/,
       (match, start, body, end) => {
-        // body 안에 "- "가 붙어 있으면 전부 줄바꿈 붙이기
         const fixed = body
-          .replace(/- /g, '\n- ')  // "- "마다 개행
-          .replace(/^\s+/, '');    // 앞쪽에 생긴 공백 정리
+          // "- "가 이어 붙어있으면 줄마다 하나씩 떨어뜨리기
+          .replace(/- /g, '\n- ')
+          .replace(/^\n+/, ''); // 맨 앞에 줄바꿈 너무 많으면 정리
         return `${start}${fixed}${end}`;
       }
     );
