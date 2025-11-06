@@ -14,27 +14,23 @@ if (!LINEAR_API_KEY || !NOTION_API_KEY || !NOTION_DATABASE_ID) {
 // 네 프로젝트 ID
 const REBLOOM_PROJECT_ID = "96080a2d-9568-4992-8093-7a059aab1c3e";
 
-// KST
 function getKSTNow() {
   const now = new Date();
   return new Date(now.getTime() + Number(TZ_OFFSET_HOURS) * 60 * 60 * 1000);
 }
 
-// 어제 0시(KST) → UTC
+// 어제 0시(KST) 기준으로 가져오게 계산
 const kstNow = getKSTNow();
 const kstYesterday = new Date(
   kstNow.getFullYear(),
   kstNow.getMonth(),
   kstNow.getDate() - 1,
-  0,
-  0,
-  0
+  0, 0, 0
 );
 const yesterdayUTC = new Date(
   kstYesterday.getTime() - Number(TZ_OFFSET_HOURS) * 60 * 60 * 1000
 );
 
-// Linear 쿼리
 const linearQuery = `
   query DailyIssues($updatedAfter: DateTimeOrDuration!, $projectId: ID!) {
     issues(
@@ -52,6 +48,8 @@ const linearQuery = `
         state { name }
         assignee { name }
         description
+        createdAt
+        updatedAt
         completedAt
         dueDate
       }
@@ -64,7 +62,7 @@ async function fetchLinear() {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: LINEAR_API_KEY,
+      "Authorization": LINEAR_API_KEY,
     },
     body: JSON.stringify({
       query: linearQuery,
@@ -74,7 +72,6 @@ async function fetchLinear() {
       },
     }),
   });
-
   if (!res.ok) {
     throw new Error("Linear error: " + (await res.text()));
   }
@@ -82,7 +79,6 @@ async function fetchLinear() {
   return json.data.issues.nodes;
 }
 
-// 어제완료 / 오늘할것 / 나머지
 function classifyIssues(issues) {
   const kst = getKSTNow();
   const todayStr = kst.toISOString().slice(0, 10);
@@ -99,7 +95,6 @@ function classifyIssues(issues) {
   for (const i of issues) {
     const state = i.state?.name ?? "Unknown";
 
-    // 어제 완료
     if (i.completedAt) {
       const comp = new Date(i.completedAt);
       const compKST = new Date(
@@ -116,32 +111,70 @@ function classifyIssues(issues) {
       }
     }
 
-    // 오늘 해야 하는 것
     if (i.dueDate === todayStr || state === "In Progress") {
       todayTargets.push(i);
       continue;
     }
 
-    // 그 외
     remaining.push(i);
   }
 
   return { doneYesterday, todayTargets, remaining };
 }
 
-async function makeDailyReportWithAI(issues, dateStr, doneText, todayText, issueSection) {
+async function makeDailyReportWithAI(issues, dateStr) {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY missing");
   }
 
+  const issueLinesForIssueSection = issues
+    .map((i) => {
+      const state = i.state?.name ?? "Unknown";
+      const assignee = i.assignee?.name ? `, 담당: ${i.assignee.name}` : "";
+      const desc = i.description
+        ? `    설명: ${i.description.slice(0, 120)}...`
+        : "";
+      return [
+        `- **${i.identifier}** ${i.title} (상태: ${state}${assignee})`,
+        `  - ${i.url}`,
+        desc,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n");
+
+  const { doneYesterday, todayTargets, remaining } = classifyIssues(issues);
+
+  const doneText =
+    doneYesterday
+      .map((i) => {
+        const who = i.assignee?.name ?? "담당자없음";
+        return `- ${who}: ${i.title}`;
+      })
+      .join("\n") || "없음";
+
+  const todayText =
+    todayTargets
+      .map((i) => {
+        const who = i.assignee?.name ?? "담당자없음";
+        return `- ${who}: ${i.title}`;
+      })
+      .join("\n") || "없음";
+
+  const remainText =
+    remaining.map((i) => `- ${i.title}`).join("\n") || "없음";
+
   const prompt = `
 너는 게임 개발 팀의 일간보고를 작성하는 보조 AI야.
-'남은 작업' 안에 뭐가 들어가야 하는지는 내가 나중에 덮어쓸 거니까 너는 형식만 만들어.
+아래에 내가 실제로 분류해 놓은 리스트가 있으니까 **그것만** 써.
+없는 사람은 "없음"이라고 반드시 써.
+아무 작업도 추가로 만들어내지 마.
 
 # ${dateStr} 일간보고: RE:BLOOM
 
 # 이슈
-${issueSection}
+(여기에 아래 [ISSUE_SECTION]을 그대로 넣어)
 
 ---
 
@@ -150,19 +183,34 @@ ${issueSection}
 ## 완료
 - 길하영:
 \`\`\`r
-(어제 길하영 작업)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("길하영:"))
+  .map(l => l.replace("길하영: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 김주홍:
 \`\`\`r
-(어제 김주홍 작업)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("김주홍:"))
+  .map(l => l.replace("김주홍: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 이승연:
 \`\`\`r
-(어제 이승연 작업)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("이승연:"))
+  .map(l => l.replace("이승연: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 기타:
 \`\`\`r
-(기타 완료)
+${doneText
+  .split("\n")
+  .filter(l => !l.includes("길하영:") && !l.includes("김주홍:") && !l.includes("이승연:"))
+  .join("\n") || "없음"}
 \`\`\`
 
 ## 미완료 (사유, 처리)
@@ -174,10 +222,8 @@ ${issueSection}
 
 ## 오전
 - ${todayText === "없음" ? "없음" : todayText}
-
 ## 오후
 - ${todayText === "없음" ? "없음" : todayText}
-
 ## (야근)
 - 없음
 
@@ -185,8 +231,11 @@ ${issueSection}
 
 # 남은 작업
 \`\`\`r
-(이 부분은 나중에 교체됨)
+${remainText}
 \`\`\`
+
+[ISSUE_SECTION]
+${issueLinesForIssueSection}
 `.trim();
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -216,7 +265,7 @@ ${issueSection}
   return data.choices[0].message.content;
 }
 
-// 이슈 섹션 말고는 DDK- 지우기
+// 이거 다시 넣어주자 – 이슈 섹션 말고는 DDK- 지워주는 후처리
 function stripKeysOutsideIssue(content) {
   const lines = content.split("\n");
   let inIssue = false;
@@ -242,7 +291,6 @@ function stripKeysOutsideIssue(content) {
     .join("\n");
 }
 
-// 노션 페이지 생성
 async function createNotionPage(content) {
   const offset = parseInt(process.env.TZ_OFFSET_HOURS || "9", 10);
   const now = new Date();
@@ -259,6 +307,7 @@ async function createNotionPage(content) {
   for (const raw of lines) {
     const line = raw.replace(/\r$/, "");
 
+    // 코드블록 토글
     if (line.trim().startsWith("```")) {
       if (!inCode) {
         inCode = true;
@@ -308,7 +357,12 @@ async function createNotionPage(content) {
         object: "block",
         type: "paragraph",
         paragraph: {
-          rich_text: [{ type: "text", text: { content: line.slice(0, 2000) } }],
+          rich_text: [
+            {
+              type: "text",
+              text: { content: line.slice(0, 2000) },
+            },
+          ],
         },
       });
     }
@@ -342,73 +396,24 @@ async function createNotionPage(content) {
 (async () => {
   try {
     const issues = await fetchLinear();
-
-    // 분류
-    const { doneYesterday, todayTargets, remaining } = classifyIssues(issues);
-
-    // 보고서에 넘길 텍스트들
-    const doneText =
-      doneYesterday
-        .map((i) => {
-          const who = i.assignee?.name ?? "담당자없음";
-          return `- ${who}: ${i.title}`;
-        })
-        .join("\n") || "없음";
-
-    const todayText =
-      todayTargets
-        .map((i) => {
-          const who = i.assignee?.name ?? "담당자없음";
-          return `- ${who}: ${i.title}`;
-        })
-        .join("\n") || "없음";
-
-    const issueSection = issues
-      .map((i) => {
-        const state = i.state?.name ?? "Unknown";
-        const assignee = i.assignee?.name ? `, 담당: ${i.assignee.name}` : "";
-        const desc = i.description
-          ? `    설명: ${i.description.slice(0, 120)}...`
-          : "";
-        return [
-          `- **${i.identifier}** ${i.title} (상태: ${state}${assignee})`,
-          `  - ${i.url}`,
-          desc,
-        ]
-          .filter(Boolean)
-          .join("\n");
-      })
-      .join("\n");
-
-    // 날짜
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const dateStr = kst.toISOString().slice(0, 10);
 
-    // 1) AI가 대충 전체 보고서 만듦
-    let report = await makeDailyReportWithAI(
-      issues,
-      dateStr,
-      doneText,
-      todayText,
-      issueSection
-    );
-
-    // 2) 우리가 남은 작업 진짜로 만들어서 덮어씌움
-    const remainingText =
-      remaining.length > 0
-        ? remaining.map((i) => `- ${i.title}`).join("\n")
-        : "없음";
-
-    report = report.replace(
-      /# 남은 작업[\s\S]*?```r[\s\S]*?```/,
-      `# 남은 작업\n\`\`\`r\n${remainingText}\n\`\`\``
-    );
-
-    // 3) 이슈 섹션 말고는 DDK- 제거
+    let report = await makeDailyReportWithAI(issues, dateStr);
     report = stripKeysOutsideIssue(report);
 
-    // 4) 노션에 생성
+    report = report.replace(
+      /(# 남은 작업[\s\S]*?```r)([\s\S]*?)(```)/,
+      (match, start, body, end) => {
+        // body 안에 "- "가 붙어 있으면 전부 줄바꿈 붙이기
+        const fixed = body
+          .replace(/- /g, '\n- ')  // "- "마다 개행
+          .replace(/^\s+/, '');    // 앞쪽에 생긴 공백 정리
+        return `${start}${fixed}${end}`;
+      }
+    );
+
     await createNotionPage(report);
     console.log("done:", issues.length, "issues");
   } catch (e) {
