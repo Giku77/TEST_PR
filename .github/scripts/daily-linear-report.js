@@ -11,7 +11,6 @@ if (!LINEAR_API_KEY || !NOTION_API_KEY || !NOTION_DATABASE_ID) {
   process.exit(1);
 }
 
-// 네 프로젝트 ID
 const REBLOOM_PROJECT_ID = "96080a2d-9568-4992-8093-7a059aab1c3e";
 
 function getKSTNow() {
@@ -19,7 +18,7 @@ function getKSTNow() {
   return new Date(now.getTime() + Number(TZ_OFFSET_HOURS) * 60 * 60 * 1000);
 }
 
-// 어제 0시(KST) 기준으로 가져오게 계산
+// 어제 0시(KST)
 const kstNow = getKSTNow();
 const kstYesterday = new Date(
   kstNow.getFullYear(),
@@ -95,6 +94,7 @@ function classifyIssues(issues) {
   for (const i of issues) {
     const state = i.state?.name ?? "Unknown";
 
+    // 어제 완료된 것
     if (i.completedAt) {
       const comp = new Date(i.completedAt);
       const compKST = new Date(
@@ -111,66 +111,27 @@ function classifyIssues(issues) {
       }
     }
 
+    // 오늘 할 것
     if (i.dueDate === todayStr || state === "In Progress") {
       todayTargets.push(i);
       continue;
     }
 
+    // 나머지
     remaining.push(i);
   }
 
   return { doneYesterday, todayTargets, remaining };
 }
 
-async function makeDailyReportWithAI(issues, dateStr) {
+async function makeDailyReportWithAI(issues, dateStr, doneText, todayText, issueLinesForIssueSection) {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY missing");
   }
 
-  const issueLinesForIssueSection = issues
-    .map((i) => {
-      const state = i.state?.name ?? "Unknown";
-      const assignee = i.assignee?.name ? `, 담당: ${i.assignee.name}` : "";
-      const desc = i.description
-        ? `    설명: ${i.description.slice(0, 120)}...`
-        : "";
-      return [
-        `- **${i.identifier}** ${i.title} (상태: ${state}${assignee})`,
-        `  - ${i.url}`,
-        desc,
-      ]
-        .filter(Boolean)
-        .join("\n");
-    })
-    .join("\n");
-
-  const { doneYesterday, todayTargets, remaining } = classifyIssues(issues);
-
-  const doneText =
-    doneYesterday
-      .map((i) => {
-        const who = i.assignee?.name ?? "담당자없음";
-        return `- ${who}: ${i.title}`;
-      })
-      .join("\n") || "없음";
-
-  const todayText =
-    todayTargets
-      .map((i) => {
-        const who = i.assignee?.name ?? "담당자없음";
-        return `- ${who}: ${i.title}`;
-      })
-      .join("\n") || "없음";
-
-  const remainText =
-  remaining.map(i => `- ${i.title}`).join("\n") || "없음";
-  const remainBlock = "```r\n" + remainText + "\n```";
-
- const prompt = `
+  const prompt = `
 너는 게임 개발 팀의 일간보고를 작성하는 보조 AI야.
 아래에 내가 실제로 분류해 놓은 리스트가 있으니까 **그것만** 써.
-없는 사람은 "없음"이라고 반드시 써.
-아무 작업도 추가로 만들어내지 마.
 
 # ${dateStr} 일간보고: RE:BLOOM
 
@@ -183,31 +144,31 @@ async function makeDailyReportWithAI(issues, dateStr) {
 \`\`\`r
 ${doneText
   .split("\n")
-  .filter(l => l.includes("길하영:"))
-  .map(l => l.replace("길하영: ", "- "))
+  .filter((l) => l.includes("길하영:"))
+  .map((l) => l.replace("길하영: ", "- "))
   .join("\n") || "없음"}
 \`\`\`
 - 김주홍:
 \`\`\`r
 ${doneText
   .split("\n")
-  .filter(l => l.includes("김주홍:"))
-  .map(l => l.replace("김주홍: ", "- "))
+  .filter((l) => l.includes("김주홍:"))
+  .map((l) => l.replace("김주홍: ", "- "))
   .join("\n") || "없음"}
 \`\`\`
 - 이승연:
 \`\`\`r
 ${doneText
   .split("\n")
-  .filter(l => l.includes("이승연:"))
-  .map(l => l.replace("이승연: ", "- "))
+  .filter((l) => l.includes("이승연:"))
+  .map((l) => l.replace("이승연: ", "- "))
   .join("\n") || "없음"}
 \`\`\`
 - 기타:
 \`\`\`r
 ${doneText
   .split("\n")
-  .filter(l => !l.includes("길하영:") && !l.includes("김주홍:") && !l.includes("이승연:"))
+  .filter((l) => !l.includes("길하영:") && !l.includes("김주홍:") && !l.includes("이승연:"))
   .join("\n") || "없음"}
 \`\`\`
 
@@ -232,7 +193,7 @@ ${doneText
 {{REMAINING_TASKS}}
 \`\`\`
 
-[ISSUE_SECTION]
+# 이슈
 ${issueLinesForIssueSection}
 `.trim();
 
@@ -263,7 +224,6 @@ ${issueLinesForIssueSection}
   return data.choices[0].message.content;
 }
 
-// 이거 다시 넣어주자 – 이슈 섹션 말고는 DDK- 지워주는 후처리
 function stripKeysOutsideIssue(content) {
   const lines = content.split("\n");
   let inIssue = false;
@@ -305,17 +265,13 @@ async function createNotionPage(content) {
   for (const raw of lines) {
     const line = raw.replace(/\r$/, "");
 
-    // 코드블록 토글
     if (line.trim().startsWith("```")) {
       if (!inCode) {
         inCode = true;
         children.push({
           object: "block",
           type: "code",
-          code: {
-            rich_text: [],
-            language: "plain text",
-          },
+          code: { rich_text: [], language: "plain text" },
         });
       } else {
         inCode = false;
@@ -355,12 +311,7 @@ async function createNotionPage(content) {
         object: "block",
         type: "paragraph",
         paragraph: {
-          rich_text: [
-            {
-              type: "text",
-              text: { content: line.slice(0, 2000) },
-            },
-          ],
+          rich_text: [{ type: "text", text: { content: line.slice(0, 2000) } }],
         },
       });
     }
@@ -371,16 +322,14 @@ async function createNotionPage(content) {
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+      Authorization: `Bearer ${NOTION_API_KEY}`,
       "Notion-Version": "2022-06-28",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      parent: { database_id: process.env.NOTION_DATABASE_ID },
+      parent: { database_id: NOTION_DATABASE_ID },
       properties: {
-        이름: {
-          title: [{ text: { content: title } }],
-        },
+        이름: { title: [{ text: { content: title } }] },
       },
       children: limitedChildren,
     }),
@@ -394,12 +343,69 @@ async function createNotionPage(content) {
 (async () => {
   try {
     const issues = await fetchLinear();
+
+    // 날짜
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const dateStr = kst.toISOString().slice(0, 10);
 
-    let report = await makeDailyReportWithAI(issues, dateStr);
-    report = report.replace("{{REMAINING_TASKS}}", remainBlock);
+    // 분류
+    const { doneYesterday, todayTargets, remaining } = classifyIssues(issues);
+
+    const doneText =
+      doneYesterday
+        .map((i) => {
+          const who = i.assignee?.name ?? "담당자없음";
+          return `- ${who}: ${i.title}`;
+        })
+        .join("\n") || "없음";
+
+    const todayText =
+      todayTargets
+        .map((i) => {
+          const who = i.assignee?.name ?? "담당자없음";
+          return `- ${who}: ${i.title}`;
+        })
+        .join("\n") || "없음";
+
+    // 이슈 섹션 원본
+    const issueLinesForIssueSection = issues
+      .map((i) => {
+        const state = i.state?.name ?? "Unknown";
+        const assignee = i.assignee?.name ? `, 담당: ${i.assignee.name}` : "";
+        const desc = i.description
+          ? `    설명: ${i.description.slice(0, 120)}...`
+          : "";
+        return [
+          `- **${i.identifier}** ${i.title} (상태: ${state}${assignee})`,
+          `  - ${i.url}`,
+          desc,
+        ]
+          .filter(Boolean)
+          .join("\n");
+      })
+      .join("\n");
+
+    // AI로 기본 텍스트 만들기 (자리표시자 포함)
+    let report = await makeDailyReportWithAI(
+      issues,
+      dateStr,
+      doneText,
+      todayText,
+      issueLinesForIssueSection
+    );
+
+    // 남은 작업 블록 실제로 만들기
+    const remainText =
+      remaining.length > 0
+        ? remaining.map((i) => `- ${i.title}`).join("\n")
+        : "없음";
+    const remainBlock = "```r\n" + remainText + "\n```";
+
+    // 자리표시자 치환
+    report = report.replace("{{REMAINING_TASKS}}", remainText); // 코드블록은 이미 프롬프트에 있음
+
+    // 키 제거
     report = stripKeysOutsideIssue(report);
 
     await createNotionPage(report);
