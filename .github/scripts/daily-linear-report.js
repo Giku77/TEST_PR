@@ -429,10 +429,12 @@ async function createNotionPage(content) {
         const who = i.assignee?.name ?? "담당자없음";
         const title = i.title;
         const desc = i.description ? i.description.slice(0, 120) : "";
-        return desc
-          ? `- ${who}: ${title}\n  - 내용: ${desc}`
-          : `- ${who}: ${title}`;
-      }).join("\n") || "없음";
+        if (desc) {
+        return `- ${who}:\n  \`\`\`r\n  ${title}\n  ${desc}\n  \`\`\``;
+      } else {
+        return `- ${who}:\n  \`\`\`r\n  ${title}\n  \`\`\``;
+      }
+    }).join("\n") || "없음";
 
     // 2) AI가 전체 문서 한 번 생성
     const now = new Date();
