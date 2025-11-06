@@ -146,73 +146,40 @@ async function createNotionPage(content) {
 
   const lines = content.split("\n");
 
-  const children = lines.map((raw) => {
-    const line = raw.trimEnd(); // 끝 공백 제거
-
-    // h1
-    if (line.startsWith("# ")) {
-      return {
-        object: "block",
-        type: "heading_1",
-        heading_1: {
-          rich_text: [{ type: "text", text: { content: line.slice(2, 2000) } }],
-        },
-      };
-    }
-    // h2
-    if (line.startsWith("## ")) {
-      return {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ type: "text", text: { content: line.slice(3, 2000) } }],
-        },
-      };
-    }
-    // h3
-    if (line.startsWith("### ")) {
-      return {
-        object: "block",
-        type: "heading_3",
-        heading_3: {
-          rich_text: [{ type: "text", text: { content: line.slice(4, 2000) } }],
-        },
-      };
-    }
-
-    // 그 외는 그냥 문단
-    return {
-      object: "block",
-      type: "paragraph",
-      paragraph: {
-        rich_text: [
-          {
-            type: "text",
-            text: { content: line.slice(0, 2000) },
-          },
-        ],
+// 1줄=1블록 만들기
+const children = lines.map((line) => ({
+  object: "block",
+  type: "paragraph",
+  paragraph: {
+    rich_text: [
+      {
+        type: "text",
+        text: { content: line.slice(0, 2000) },
       },
-    };
-  });
+    ],
+  },
+}));
 
-  const res = await fetch("https://api.notion.com/v1/pages", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
+// 노션은 한 번에 100개까지만
+const limitedChildren = children.slice(0, 100);
+
+const res = await fetch("https://api.notion.com/v1/pages", {
+  method: "POST",
+  headers: {
+    Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+    "Notion-Version": "2022-06-28",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    parent: { database_id: process.env.NOTION_DATABASE_ID },
+    properties: {
+      이름: {
+        title: [{ text: { content: title } }],
+      },
     },
-    body: JSON.stringify({
-      parent: { database_id: process.env.NOTION_DATABASE_ID },
-      properties: {
-        // 여기 이름은 네 DB 타이틀 속성 이름으로
-        "이름": {
-          title: [{ text: { content: title } }],
-        },
-      },
-      children,
-    }),
-  });
+    children: limitedChildren,
+  }),
+});
 
   if (!res.ok) {
     throw new Error("Notion error: " + (await res.text()));
