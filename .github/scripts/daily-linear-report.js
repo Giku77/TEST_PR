@@ -163,8 +163,7 @@ async function makeDailyReportWithAI(issues, dateStr) {
       .join("\n") || "없음";
 
   const remainText =
-    remaining.map((i) => `- ${i.title}`).join("\n") || "없음";
-
+  remaining.map(i => `- ${i.title}`).join("\n") || "없음";
   const remainBlock = "```r\n" + remainText + "\n```";
 
  const prompt = `
@@ -230,7 +229,7 @@ ${doneText
 
 # 남은 작업
 \`\`\`r
-${remainBlock}
+{{REMAINING_TASKS}}
 \`\`\`
 
 [ISSUE_SECTION]
@@ -400,6 +399,7 @@ async function createNotionPage(content) {
     const dateStr = kst.toISOString().slice(0, 10);
 
     let report = await makeDailyReportWithAI(issues, dateStr);
+    report = report.replace("{{REMAINING_TASKS}}", remainBlock);
     report = stripKeysOutsideIssue(report);
 
     await createNotionPage(report);
