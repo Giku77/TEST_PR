@@ -324,10 +324,18 @@ async function createNotionPage(content) {
 
     if (inCode) {
       const last = children[children.length - 1];
-      last.code.rich_text.push({
-        type: "text",
-        text: { content: line.slice(0, 2000) },
-      });
+
+      // 처음 들어오는 거면 한 덩어리 만들어주고
+      if (last.code.rich_text.length === 0) {
+        last.code.rich_text.push({
+          type: "text",
+          text: { content: line },
+        });
+      } else {
+        // 이미 있으면 거기에 \n 이어붙이기
+        last.code.rich_text[0].text.content += "\n" + line;
+      }
+
       continue;
     }
 
