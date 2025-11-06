@@ -430,9 +430,9 @@ async function createNotionPage(content) {
         const title = i.title;
         const desc = i.description ? i.description.slice(0, 120) : "";
         if (desc) {
-        return `- ${who}:\n  \`\`\`r\n  ${title}\n  ${desc}\n  \`\`\``;
+        return `- ${who}:\n  \`\`\`r\n${title}\n-내용: \n${desc}\n\`\`\``;
       } else {
-        return `- ${who}:\n  \`\`\`r\n  ${title}\n  \`\`\``;
+        return `- ${who}:\n  \`\`\`r\n${title}\n\`\`\``;
       }
     }).join("\n") || "없음";
 
