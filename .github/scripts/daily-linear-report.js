@@ -136,36 +136,46 @@ ${issueLines}
 
 
 async function createNotionPage(content) {
-  const offset = parseInt(TZ_OFFSET_HOURS, 10) || 0;
+  const offset = parseInt(process.env.TZ_OFFSET_HOURS || "9", 10);
+  const now = new Date();
   const kstNow = new Date(now.getTime() + offset * 60 * 60 * 1000);
   const yyyy = kstNow.getUTCFullYear();
   const mm = String(kstNow.getUTCMonth() + 1).padStart(2, "0");
   const dd = String(kstNow.getUTCDate()).padStart(2, "0");
   const title = `Linear 일간보고 ${yyyy}-${mm}-${dd}`;
 
+  // 1) 본문을 줄 단위로 나누기
+  const lines = content.split("\n");
+
+  // 2) 각 줄을 하나의 paragraph 블록으로 만들기 (2000자 안 넘게)
+  const children = lines.map((line) => ({
+    object: "block",
+    type: "paragraph",
+    paragraph: {
+      rich_text: [
+        {
+          type: "text",
+          text: { content: line.slice(0, 2000) }, // 혹시 한 줄이 너무 길면 잘라
+        },
+      ],
+    },
+  }));
+
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${NOTION_API_KEY}`,
+      "Authorization": `Bearer ${process.env.NOTION_API_KEY}`,
       "Notion-Version": "2022-06-28",
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      parent: { database_id: NOTION_DATABASE_ID },
+      parent: { database_id: process.env.NOTION_DATABASE_ID },
       properties: {
-        Name: {
+        "이름": { // 너 DB에서 쓰는 타이틀 속성
           title: [{ text: { content: title } }],
         },
       },
-      children: [
-        {
-          object: "block",
-          type: "paragraph",
-          paragraph: {
-            rich_text: [{ type: "text", text: { content } }],
-          },
-        },
-      ],
+      children,
     }),
   });
 
