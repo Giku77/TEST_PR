@@ -250,8 +250,117 @@ ${issueLinesForIssueSection}
   return data.choices[0].message.content;
 }
 
-// 아래 createNotionPage는 네가 쓰던 거 그대로 써도 됨
-// (헤더/코드/구분선으로 잘라서 100블록까지만 올려주는 버전)
-// ...
+async function createNotionPage(content) { const offset = parseInt(process.env.TZ_OFFSET_HOURS || "9", 10); const now = new Date(); const kstNow = new Date(now.getTime() + offset * 60 * 60 * 1000); const yyyy = kstNow.getUTCFullYear(); const mm = String(kstNow.getUTCMonth() + 1).padStart(2, "0"); const dd = String(kstNow.getUTCDate()).padStart(2, "0"); const title = Linear 일간보고 ${yyyy}-${mm}-${dd}; const lines = content.split("\n"); const children = []; let inCode = false; for (const raw of lines) { const line = raw.replace(/\r$/, ""); // CR 지우기 // 코드블록 토글 if (line.trim().startsWith("
+")) {
+      if (!inCode) {
+        // 코드 시작
+        inCode = true;
+        children.push({
+          object: "block",
+          type: "code",
+          code: {
+            rich_text: [],
+            language: "plain text",
+          },
+        });
+      } else {
+        // 코드 끝
+        inCode = false;
+      }
+      continue;
+    }
 
-// 맨 아래 실행부는 그대로
+    if (inCode) {
+      // 마지막으로 추가된 code 블록에 텍스트 추가
+      const last = children[children.length - 1];
+      last.code.rich_text.push({
+        type: "text",
+        text: { content: line.slice(0, 2000) },
+      });
+      continue;
+    }
+
+    // 헤더들
+    if (line.startsWith("# ")) {
+      children.push({
+        object: "block",
+        type: "heading_1",
+        heading_1: {
+          rich_text: [{ type: "text", text: { content: line.slice(2) } }],
+        },
+      });
+    } else if (line.startsWith("## ")) {
+      children.push({
+        object: "block",
+        type: "heading_2",
+        heading_2: {
+          rich_text: [{ type: "text", text: { content: line.slice(3) } }],
+        },
+      });
+    } else if (line.trim() === "---") {
+      children.push({
+        object: "block",
+        type: "divider",
+        divider: {},
+      });
+    } else {
+      // 일반 문단
+      children.push({
+        object: "block",
+        type: "paragraph",
+        paragraph: {
+          rich_text: [
+            {
+              type: "text",
+              text: { content: line.slice(0, 2000) },
+            },
+          ],
+        },
+      });
+    }
+  }
+
+  // 노션은 100블록까지만
+  const limitedChildren = children.slice(0, 100);
+
+  const res = await fetch("https://api.notion.com/v1/pages", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.NOTION_API_KEY}`,
+      "Notion-Version": "2022-06-28",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      parent: { database_id: process.env.NOTION_DATABASE_ID },
+      properties: {
+        이름: {
+          title: [{ text: { content: title } }],
+        },
+      },
+      children: limitedChildren,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Notion error: " + (await res.text()));
+  }
+}
+
+(async () => {
+  try {
+    const issues = await fetchLinear();
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const dateStr = kst.toISOString().slice(0, 10);
+
+    let report = await makeDailyReportWithAI(issues, dateStr);
+    // AI가 혹시 섹션 아래에 키를 넣었으면 한 번 더 깎기
+    report = stripKeysOutsideIssue(report);
+
+    await createNotionPage(report);
+    console.log("done:", issues.length, "issues");
+  } catch (e) {
+    console.error(e);
+    process.exit(1);
+  }
+})();
