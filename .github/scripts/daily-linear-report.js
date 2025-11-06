@@ -32,7 +32,7 @@ const yesterdayUTC = new Date(
 );
 
 const linearQuery = `
-  query DailyIssues($updatedAfter: DateTimeOrDuration!, $projectId: String!) {
+  query DailyIssues($updatedAfter: DateTimeOrDuration!, $projectId: ID!) {
     issues(
       filter: {
         project: { id: { eq: $projectId } }
