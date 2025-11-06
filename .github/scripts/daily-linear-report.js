@@ -165,14 +165,13 @@ async function makeDailyReportWithAI(issues, dateStr) {
   const remainText =
     remaining.map((i) => `- ${i.title}`).join("\n") || "없음";
 
-  const prompt = `
+ const prompt = `
 너는 게임 개발 팀의 일간보고를 작성하는 보조 AI야.
-형식을 지키고, 전일/금일/남은 작업에는 DDK- 같은 키를 쓰지 마.
+아래에 내가 실제로 분류해 놓은 리스트가 있으니까 **그것만** 써.
+없는 사람은 "없음"이라고 반드시 써.
+아무 작업도 추가로 만들어내지 마.
 
 # ${dateStr} 일간보고: RE:BLOOM
-
-# 이슈
-(여기에 아래 [ISSUE_SECTION]을 그대로 넣어)
 
 ---
 
@@ -181,54 +180,60 @@ async function makeDailyReportWithAI(issues, dateStr) {
 ## 완료
 - 길하영:
 \`\`\`r
-(어제 길하영이 한 일 써)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("길하영:"))
+  .map(l => l.replace("길하영: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 김주홍:
 \`\`\`r
-(어제 김주홍이 한 일 써)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("김주홍:"))
+  .map(l => l.replace("김주홍: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 이승연:
 \`\`\`r
-(어제 이승연이 한 일 써)
+${doneText
+  .split("\n")
+  .filter(l => l.includes("이승연:"))
+  .map(l => l.replace("이승연: ", "- "))
+  .join("\n") || "없음"}
 \`\`\`
 - 기타:
 \`\`\`r
-(담당자 없는 완료)
+${doneText
+  .split("\n")
+  .filter(l => !l.includes("길하영:") && !l.includes("김주홍:") && !l.includes("이승연:"))
+  .join("\n") || "없음"}
 \`\`\`
 
 ## 미완료 (사유, 처리)
-- 어제 못한 것 간단히
+- ${todayText === "없음" ? "없음" : todayText}
 
 ---
 
 # 금일 보고
 
 ## 오전
-- 이름: 할 일
+- ${todayText === "없음" ? "없음" : todayText}
 ## 오후
-- 이름: 할 일
+- ${todayText === "없음" ? "없음" : todayText}
 ## (야근)
-- 없으면 "없음"
+- 없음
 
 ---
 
 # 남은 작업
 \`\`\`r
-(해야 할 것들)
-\`\`\`
-
-[어제 완료 목록]
-${doneText}
-
-[오늘 해야 할 것]
-${todayText}
-
-[남은 것]
 ${remainText}
+\`\`\`
 
 [ISSUE_SECTION]
 ${issueLinesForIssueSection}
-  `.trim();
+`.trim();
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
