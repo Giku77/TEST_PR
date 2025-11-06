@@ -428,17 +428,34 @@ async function createNotionPage(content) {
     let report = await makeDailyReportWithAI(issues, dateStr);
     report = stripKeysOutsideIssue(report);
 
-    report = report.replace(
-      /(# 남은 작업[\s\S]*?```(?:r)?)([\s\S]*?)(```)/,
-      (match, start, body, end) => {
-        const fixed = body
-          // "- "가 이어 붙어있으면 줄마다 하나씩 떨어뜨리기
-          .replace(/- /g, '\n- ')
-          .replace(/^\n+/, ''); // 맨 앞에 줄바꿈 너무 많으면 정리
-        return `${start}${fixed}${end}`;
-      }
-    );
+   report = report.replace(
+  /# 금일 보고[\s\S]*?# 남은 작업/,
+  () => {
+    const block =
+`# 금일 보고
 
+## 오전
+${todayTextDetailed}
+
+## 오후
+${todayTextDetailed}
+
+## (야근)
+- 없음
+
+# 남은 작업
+`;
+    return block;
+  }
+);
+
+report = report.replace(
+  /(# 남은 작업[\s\S]*?```(?:r)?)([\s\S]*?)(```)/,
+  (match, start, body, end) => {
+    const fixed = body.replace(/- /g, '\n- ').replace(/^\n+/, '');
+    return `${start}${fixed}${end}`;
+  }
+);
     await createNotionPage(report);
     console.log("done:", issues.length, "issues");
   } catch (e) {
