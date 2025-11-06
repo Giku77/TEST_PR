@@ -61,6 +61,80 @@ function makeReport(issues) {
     .join("\n");
 }
 
+async function makeDailyReportWithAI(issues, dateStr) {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY missing");
+  }
+
+  // Linear 이슈를 프롬프트용 텍스트로 변환
+  const issueLines = issues.map((i) => {
+    const state = i.state?.name ?? "Unknown";
+    const assignee = i.assignee?.name ? `, 담당: ${i.assignee.name}` : "";
+    return `- ${i.identifier} ${i.title} (상태: ${state}${assignee})\n  - ${i.url}`;
+  }).join("\n");
+
+  const prompt = `
+너는 게임 개발 팀의 일간보고를 작성하는 보조 AI야.
+아래 이슈 목록을 보고 한국어로 일간보고 문서를 만들어줘.
+
+형식은 아래처럼 맞춰줘. 비어 있는 부분은 적당히 "없음" 이라고 써.
+
+# ${dateStr} 일간보고: 6팀 (백민우, 홍지석, 박다인, 박건혁 / 길하영, 김주홍, 이승연)
+
+# 이슈
+- (여기에 이슈들을 그대로 나열)
+
+---
+
+# 전일 보고
+
+## 완료
+- 담당자가 있는 이슈는 담당자 이름 아래에 정리해.
+- 담당자가 없는 이슈는 "기타"로 모아.
+
+## 미완료 (사유, 처리)
+- 상태가 Todo 또는 In Progress인 것만 간단히 적어.
+
+---
+
+# 금일 보고
+- 상태가 In Progress인 이슈를 오늘 작업 예정으로 적어.
+
+---
+
+# 남은 작업
+- 상태가 Todo인 이슈만 나열.
+
+아래가 이슈 목록이야:
+
+${issueLines}
+`.trim();
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",     // 추천 모델
+      messages: [
+        { role: "system", content: "너는 팀 일간보고를 한국어로 예쁘게 작성하는 비서야." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.4,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error("OpenAI error: " + await res.text());
+  }
+
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+
 async function createNotionPage(content) {
   const offset = parseInt(TZ_OFFSET_HOURS, 10) || 0;
   const kstNow = new Date(now.getTime() + offset * 60 * 60 * 1000);
@@ -103,7 +177,12 @@ async function createNotionPage(content) {
 (async () => {
   try {
     const issues = await fetchLinear();
-    const report = makeReport(issues);
+    // KST 날짜 문자열
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const dateStr = kst.toISOString().slice(0, 10); // 2025-09-30 이런 식
+    
+    const report = await makeDailyReportWithAI(issues, dateStr);
     await createNotionPage(report);
     console.log("done:", issues.length, "issues");
   } catch (e) {
