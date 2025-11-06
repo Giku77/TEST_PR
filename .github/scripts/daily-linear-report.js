@@ -162,6 +162,20 @@ async function makeDailyReportWithAI(issues, dateStr) {
       })
       .join("\n") || "없음";
 
+  const todayTextDetailed =
+  todayTargets
+    .map((i) => {
+      const who = i.assignee?.name ?? "담당자없음";
+      const title = i.title;
+      const desc = i.description ? i.description.slice(0, 120) : ""; // 너무 길면 앞부분만
+      if (desc) {
+        return `- ${who}: ${title}\n  - 내용: ${desc}`;
+      } else {
+        return `- ${who}: ${title}`;
+      }
+    })
+    .join("\n") || "없음";
+
   const remainText =
     remaining.map((i) => `- ${i.title}`).join("\n") || "없음";
 
@@ -218,9 +232,9 @@ ${doneText
 # 금일 보고
 
 ## 오전
-- ${todayText === "없음" ? "없음" : todayText}
+- ${todayTextDetailed}
 ## 오후
-- ${todayText === "없음" ? "없음" : todayText}
+- ${todayTextDetailed}
 ## (야근)
 - 없음
 
