@@ -421,18 +421,33 @@ async function createNotionPage(content) {
 (async () => {
   try {
     const issues = await fetchLinear();
+
+    // 1) 오늘 상세 텍스트를 여기서 만든다
+    const { todayTargets } = classifyIssues(issues);
+    const todayTextDetailed =
+      todayTargets.map((i) => {
+        const who = i.assignee?.name ?? "담당자없음";
+        const title = i.title;
+        const desc = i.description ? i.description.slice(0, 120) : "";
+        return desc
+          ? `- ${who}: ${title}\n  - 내용: ${desc}`
+          : `- ${who}: ${title}`;
+      }).join("\n") || "없음";
+
+    // 2) AI가 전체 문서 한 번 생성
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
     const dateStr = kst.toISOString().slice(0, 10);
-
     let report = await makeDailyReportWithAI(issues, dateStr);
+
+    // 3) 이슈키 제거
     report = stripKeysOutsideIssue(report);
 
-   report = report.replace(
-  /# 금일 보고[\s\S]*?# 남은 작업/,
-  () => {
-    const block =
-`# 금일 보고
+    // 4) "금일 보고" 섹션만 우리가 만든 걸로 갈아끼우기
+    report = report.replace(
+      /# 금일 보고[\s\S]*?# 남은 작업/,
+      () => {
+        return `# 금일 보고
 
 ## 오전
 ${todayTextDetailed}
@@ -445,17 +460,19 @@ ${todayTextDetailed}
 
 # 남은 작업
 `;
-    return block;
-  }
-);
+      }
+    );
 
-report = report.replace(
-  /(# 남은 작업[\s\S]*?```(?:r)?)([\s\S]*?)(```)/,
-  (match, start, body, end) => {
-    const fixed = body.replace(/- /g, '\n- ').replace(/^\n+/, '');
-    return `${start}${fixed}${end}`;
-  }
-);
+    // 5) 남은 작업 코드블록 붙어있는 거 풀기
+    report = report.replace(
+      /(# 남은 작업[\s\S]*?```(?:r)?)([\s\S]*?)(```)/,
+      (match, start, body, end) => {
+        const fixed = body.replace(/- /g, '\n- ').replace(/^\n+/, '');
+        return `${start}${fixed}${end}`;
+      }
+    );
+
+    // 6) 노션 생성
     await createNotionPage(report);
     console.log("done:", issues.length, "issues");
   } catch (e) {
