@@ -144,22 +144,56 @@ async function createNotionPage(content) {
   const dd = String(kstNow.getUTCDate()).padStart(2, "0");
   const title = `Linear 일간보고 ${yyyy}-${mm}-${dd}`;
 
-  // 1) 본문을 줄 단위로 나누기
   const lines = content.split("\n");
 
-  // 2) 각 줄을 하나의 paragraph 블록으로 만들기 (2000자 안 넘게)
-  const children = lines.map((line) => ({
-    object: "block",
-    type: "paragraph",
-    paragraph: {
-      rich_text: [
-        {
-          type: "text",
-          text: { content: line.slice(0, 2000) }, // 혹시 한 줄이 너무 길면 잘라
+  const children = lines.map((raw) => {
+    const line = raw.trimEnd(); // 끝 공백 제거
+
+    // h1
+    if (line.startsWith("# ")) {
+      return {
+        object: "block",
+        type: "heading_1",
+        heading_1: {
+          rich_text: [{ type: "text", text: { content: line.slice(2, 2000) } }],
         },
-      ],
-    },
-  }));
+      };
+    }
+    // h2
+    if (line.startsWith("## ")) {
+      return {
+        object: "block",
+        type: "heading_2",
+        heading_2: {
+          rich_text: [{ type: "text", text: { content: line.slice(3, 2000) } }],
+        },
+      };
+    }
+    // h3
+    if (line.startsWith("### ")) {
+      return {
+        object: "block",
+        type: "heading_3",
+        heading_3: {
+          rich_text: [{ type: "text", text: { content: line.slice(4, 2000) } }],
+        },
+      };
+    }
+
+    // 그 외는 그냥 문단
+    return {
+      object: "block",
+      type: "paragraph",
+      paragraph: {
+        rich_text: [
+          {
+            type: "text",
+            text: { content: line.slice(0, 2000) },
+          },
+        ],
+      },
+    };
+  });
 
   const res = await fetch("https://api.notion.com/v1/pages", {
     method: "POST",
@@ -171,7 +205,8 @@ async function createNotionPage(content) {
     body: JSON.stringify({
       parent: { database_id: process.env.NOTION_DATABASE_ID },
       properties: {
-        "이름": { // 너 DB에서 쓰는 타이틀 속성
+        // 여기 이름은 네 DB 타이틀 속성 이름으로
+        "이름": {
           title: [{ text: { content: title } }],
         },
       },
