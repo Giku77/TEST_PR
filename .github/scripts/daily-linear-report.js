@@ -82,28 +82,34 @@ async function fetchLinear() {
 function classifyIssues(issues) {
   const kst = getKSTNow();
   const todayStr = kst.toISOString().slice(0, 10);
-  const yesterday = new Date(
+
+  // 어제 KST 날짜
+  const yesterdayKST = new Date(
     kst.getFullYear(),
     kst.getMonth(),
     kst.getDate() - 1
   );
+  const yesterdayStr = yesterdayKST.toISOString().slice(0, 10);
 
   const doneYesterday = [];
   const todayTargets = [];
   const remaining = [];
+  const notDoneFromYesterday = [];
 
   for (const i of issues) {
     const state = i.state?.name ?? "Unknown";
 
+    // 완료된 거면 어제 완료인지 먼저 체크
     if (i.completedAt) {
       const comp = new Date(i.completedAt);
       const compKST = new Date(
         comp.getTime() + Number(TZ_OFFSET_HOURS) * 60 * 60 * 1000
       );
+
       const isYesterday =
-        compKST.getFullYear() === yesterday.getFullYear() &&
-        compKST.getMonth() === yesterday.getMonth() &&
-        compKST.getDate() === yesterday.getDate();
+        compKST.getFullYear() === yesterdayKST.getFullYear() &&
+        compKST.getMonth() === yesterdayKST.getMonth() &&
+        compKST.getDate() === yesterdayKST.getDate();
 
       if (isYesterday) {
         doneYesterday.push(i);
@@ -111,6 +117,14 @@ function classifyIssues(issues) {
       }
     }
 
+    // "어제까지 하기로 했는데 안 끝난 것"
+    if (i.dueDate === yesterdayStr && !i.completedAt) {
+      notDoneFromYesterday.push(i);
+      // 이건 동시에 remaining에도 들어갈 수 있으니까 아래로 안 넘기고 continue 해도 됨
+      continue;
+    }
+
+    // 오늘 할 일 기준
     if (i.dueDate === todayStr || state === "In Progress") {
       todayTargets.push(i);
       continue;
@@ -119,7 +133,7 @@ function classifyIssues(issues) {
     remaining.push(i);
   }
 
-  return { doneYesterday, todayTargets, remaining };
+  return { doneYesterday, todayTargets, remaining, notDoneFromYesterday };
 }
 
 async function makeDailyReportWithAI(issues, dateStr) {
@@ -144,7 +158,15 @@ async function makeDailyReportWithAI(issues, dateStr) {
     })
     .join("\n");
 
-  const { doneYesterday, todayTargets, remaining } = classifyIssues(issues);
+  const { doneYesterday, todayTargets, remaining, notDoneFromYesterday } = classifyIssues(issues);
+
+  const notDoneText =
+    notDoneFromYesterday
+      .map((i) => {
+        const who = i.assignee?.name ?? "담당자없음";
+        return `- ${who}: ${i.title}`;
+      })
+      .join("\n") || "없음";
 
   const doneText =
     doneYesterday
@@ -225,7 +247,7 @@ ${doneText
 \`\`\`
 
 ## 미완료 (사유, 처리)
-- ${todayText === "없음" ? "없음" : todayText}
+- ${notDoneText}
 
 ---
 
@@ -436,6 +458,37 @@ async function createNotionPage(content) {
       }
     }).join("\n") || "없음";
 
+    function formatTaskLine(i) {
+  const who = i.assignee?.name ?? "담당자없음";
+  const title = i.title;
+  const desc = i.description ? i.description.slice(0, 120) : "";
+  if (desc) {
+    return `- ${who}:\n  \`\`\`r\n${title}\n-내용:\n${desc}\n\`\`\``;
+  } else {
+    return `- ${who}:\n  \`\`\`r\n${title}\n\`\`\``;
+  }
+}
+
+const morningTasks = [];
+const afternoonTasks = [];
+
+for (const i of todayTargets) {
+  const title = i.title ?? "";
+
+  if (title.includes("[오전]")) {
+    morningTasks.push(formatTaskLine(i));
+  } else if (title.includes("[오후]")) {
+    afternoonTasks.push(formatTaskLine(i));
+  } else {
+    // 태그 없으면 둘 다
+    morningTasks.push(formatTaskLine(i));
+    afternoonTasks.push(formatTaskLine(i));
+  }
+}
+
+const morningText = morningTasks.join("\n") || "없음";
+const afternoonText = afternoonTasks.join("\n") || "없음";
+
     // 2) AI가 전체 문서 한 번 생성
     const now = new Date();
     const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -452,10 +505,10 @@ async function createNotionPage(content) {
         return `# 금일 보고
 
 ## 오전
-${todayTextDetailed}
+${morningText}
 
 ## 오후
-${todayTextDetailed}
+${afternoonText}
 
 ## (야근)
 - 없음
