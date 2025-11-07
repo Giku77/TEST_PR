@@ -267,8 +267,6 @@ ${doneText
 ${remainText}
 \`\`\`
 
-[ISSUE_SECTION]
-${issueLinesForIssueSection}
 `.trim();
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
