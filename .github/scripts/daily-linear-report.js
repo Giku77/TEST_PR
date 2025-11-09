@@ -219,7 +219,7 @@ async function makeDailyReportWithAI(issues, dateStr) {
 ${doneText
   .split("\n")
   .filter(l => l.includes("길하영:"))
-  .map(l => l.replace("길하영: ", "- "))
+  .map(l => l.replace("길하영: ", ""))
   .join("\n") || "없음"}
 \`\`\`
 - 김주홍:
@@ -227,7 +227,7 @@ ${doneText
 ${doneText
   .split("\n")
   .filter(l => l.includes("김주홍:"))
-  .map(l => l.replace("김주홍: ", "- "))
+  .map(l => l.replace("김주홍: ", ""))
   .join("\n") || "없음"}
 \`\`\`
 - 이승연:
@@ -235,7 +235,7 @@ ${doneText
 ${doneText
   .split("\n")
   .filter(l => l.includes("이승연:"))
-  .map(l => l.replace("이승연: ", "- "))
+  .map(l => l.replace("이승연: ", ""))
   .join("\n") || "없음"}
 \`\`\`
 - 기타:
