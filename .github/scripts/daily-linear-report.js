@@ -12,7 +12,7 @@ if (!LINEAR_API_KEY || !NOTION_API_KEY || !NOTION_DATABASE_ID) {
 }
 
 // 네 프로젝트 ID
-const REBLOOM_PROJECT_ID = "96080a2d-9568-4992-8093-7a059aab1c3e";
+const REBLOOM_PROJECT_ID = "82960c42-ea35-43a1-906d-aad4dbe7eaa8";
 
 function getKSTNow() {
   const now = new Date();
